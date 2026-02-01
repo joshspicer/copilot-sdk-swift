@@ -195,6 +195,9 @@ final class SessionEventsTests: XCTestCase {
         if case .toolExecutionComplete(let data) = event.data {
             XCTAssertEqual(data.toolName, "read_file")
             XCTAssertEqual(data.success, true)
+            // Verify result structure is properly decoded
+            XCTAssertNotNil(data.result)
+            XCTAssertEqual(data.result?.content, "file contents here")
         } else {
             XCTFail("Expected toolExecutionComplete data")
         }
