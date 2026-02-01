@@ -15,6 +15,13 @@ final class SessionEventsTests: XCTestCase {
         XCTAssertEqual(SessionEventType(rawValue: "session.error"), .sessionError)
         XCTAssertEqual(SessionEventType(rawValue: "assistant.message"), .assistantMessage)
         XCTAssertEqual(SessionEventType(rawValue: "tool.execution_start"), .toolExecutionStart)
+        // Test new event types
+        XCTAssertEqual(SessionEventType(rawValue: "session.info"), .sessionInfo)
+        XCTAssertEqual(SessionEventType(rawValue: "session.model_change"), .sessionModelChange)
+        XCTAssertEqual(SessionEventType(rawValue: "assistant.turn_start"), .assistantTurnStart)
+        XCTAssertEqual(SessionEventType(rawValue: "assistant.usage"), .assistantUsage)
+        XCTAssertEqual(SessionEventType(rawValue: "tool.user_requested"), .toolUserRequested)
+        XCTAssertEqual(SessionEventType(rawValue: "subagent.started"), .subagentStarted)
     }
     
     func testUnknownEventType() {
@@ -30,8 +37,11 @@ final class SessionEventsTests: XCTestCase {
         {
             "type": "session.start",
             "sessionId": "test-session-123",
-            "model": "gpt-4",
-            "timestamp": 1234567890
+            "selectedModel": "gpt-4",
+            "version": 2,
+            "producer": "copilot-sdk",
+            "copilotVersion": "1.0.0",
+            "startTime": "2024-01-01T00:00:00Z"
         }
         """
         
@@ -42,8 +52,8 @@ final class SessionEventsTests: XCTestCase {
         
         if case .sessionStart(let data) = event.data {
             XCTAssertEqual(data.sessionId, "test-session-123")
-            XCTAssertEqual(data.model, "gpt-4")
-            XCTAssertEqual(data.timestamp, 1234567890)
+            XCTAssertEqual(data.selectedModel, "gpt-4")
+            XCTAssertEqual(data.version, 2)
         } else {
             XCTFail("Expected sessionStart data")
         }
@@ -68,6 +78,8 @@ final class SessionEventsTests: XCTestCase {
         let json = """
         {
             "type": "session.error",
+            "errorType": "internal_error",
+            "message": "Something went wrong",
             "error": "Something went wrong",
             "code": "INTERNAL_ERROR",
             "sessionId": "error-session",
@@ -81,7 +93,8 @@ final class SessionEventsTests: XCTestCase {
         XCTAssertEqual(event.type, .sessionError)
         
         if case .sessionError(let data) = event.data {
-            XCTAssertEqual(data.error, "Something went wrong")
+            XCTAssertEqual(data.message, "Something went wrong")
+            XCTAssertEqual(data.errorType, "internal_error")
             XCTAssertEqual(data.code, "INTERNAL_ERROR")
         } else {
             XCTFail("Expected sessionError data")
@@ -166,7 +179,8 @@ final class SessionEventsTests: XCTestCase {
             "type": "tool.execution_complete",
             "toolName": "read_file",
             "toolCallId": "call-456",
-            "result": "file contents here",
+            "success": true,
+            "result": {"content": "file contents here"},
             "resultType": "success",
             "sessionId": "tool-session",
             "timestamp": 1234567896
@@ -180,7 +194,10 @@ final class SessionEventsTests: XCTestCase {
         
         if case .toolExecutionComplete(let data) = event.data {
             XCTAssertEqual(data.toolName, "read_file")
-            XCTAssertEqual(data.resultType, "success")
+            XCTAssertEqual(data.success, true)
+            // Verify result structure is properly decoded
+            XCTAssertNotNil(data.result)
+            XCTAssertEqual(data.result?.content, "file contents here")
         } else {
             XCTFail("Expected toolExecutionComplete data")
         }
@@ -222,6 +239,9 @@ final class SessionEventsTests: XCTestCase {
         {
             "type": "session.compaction_complete",
             "sessionId": "compaction-session",
+            "success": true,
+            "preCompactionTokens": 100000,
+            "postCompactionTokens": 50000,
             "tokensBefore": 100000,
             "tokensAfter": 50000,
             "timestamp": 1234567899
@@ -237,10 +257,102 @@ final class SessionEventsTests: XCTestCase {
         XCTAssertEqual(completeEvent.type, .sessionCompactionComplete)
         
         if case .sessionCompactionComplete(let data) = completeEvent.data {
-            XCTAssertEqual(data.tokensBefore, 100000)
-            XCTAssertEqual(data.tokensAfter, 50000)
+            XCTAssertEqual(data.preCompactionTokens, 100000)
+            XCTAssertEqual(data.postCompactionTokens, 50000)
         } else {
             XCTFail("Expected compaction complete data")
+        }
+    }
+    
+    // MARK: - New Event Type Tests
+    
+    func testDecodeSessionInfoEvent() throws {
+        let json = """
+        {
+            "type": "session.info",
+            "infoType": "notification",
+            "message": "Model updated"
+        }
+        """
+        
+        let decoder = JSONDecoder()
+        let event = try decoder.decode(SessionEvent.self, from: json.data(using: .utf8)!)
+        
+        XCTAssertEqual(event.type, .sessionInfo)
+        
+        if case .sessionInfo(let data) = event.data {
+            XCTAssertEqual(data.infoType, "notification")
+            XCTAssertEqual(data.message, "Model updated")
+        } else {
+            XCTFail("Expected sessionInfo data")
+        }
+    }
+    
+    func testDecodeAssistantTurnStartEvent() throws {
+        let json = """
+        {
+            "type": "assistant.turn_start",
+            "turnId": "turn-123"
+        }
+        """
+        
+        let decoder = JSONDecoder()
+        let event = try decoder.decode(SessionEvent.self, from: json.data(using: .utf8)!)
+        
+        XCTAssertEqual(event.type, .assistantTurnStart)
+        
+        if case .assistantTurnStart(let data) = event.data {
+            XCTAssertEqual(data.turnId, "turn-123")
+        } else {
+            XCTFail("Expected assistantTurnStart data")
+        }
+    }
+    
+    func testDecodeAssistantUsageEvent() throws {
+        let json = """
+        {
+            "type": "assistant.usage",
+            "model": "gpt-4",
+            "inputTokens": 100,
+            "outputTokens": 50
+        }
+        """
+        
+        let decoder = JSONDecoder()
+        let event = try decoder.decode(SessionEvent.self, from: json.data(using: .utf8)!)
+        
+        XCTAssertEqual(event.type, .assistantUsage)
+        
+        if case .assistantUsage(let data) = event.data {
+            XCTAssertEqual(data.model, "gpt-4")
+            XCTAssertEqual(data.inputTokens, 100)
+            XCTAssertEqual(data.outputTokens, 50)
+        } else {
+            XCTFail("Expected assistantUsage data")
+        }
+    }
+    
+    func testDecodeSubagentStartedEvent() throws {
+        let json = """
+        {
+            "type": "subagent.started",
+            "toolCallId": "call-789",
+            "agentName": "code-reviewer",
+            "agentDisplayName": "Code Reviewer",
+            "agentDescription": "Reviews code for issues"
+        }
+        """
+        
+        let decoder = JSONDecoder()
+        let event = try decoder.decode(SessionEvent.self, from: json.data(using: .utf8)!)
+        
+        XCTAssertEqual(event.type, .subagentStarted)
+        
+        if case .subagentStarted(let data) = event.data {
+            XCTAssertEqual(data.agentName, "code-reviewer")
+            XCTAssertEqual(data.agentDisplayName, "Code Reviewer")
+        } else {
+            XCTFail("Expected subagentStarted data")
         }
     }
     
