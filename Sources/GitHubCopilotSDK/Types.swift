@@ -21,6 +21,9 @@ public struct CopilotClientOptions: Sendable {
     /// Path to the Copilot CLI executable (default: "copilot")
     public var cliPath: String
     
+    /// Extra arguments to pass to the CLI executable (inserted before SDK-managed args)
+    public var cliArgs: [String]
+    
     /// Working directory for the CLI process (default: current directory)
     public var cwd: String?
     
@@ -60,6 +63,7 @@ public struct CopilotClientOptions: Sendable {
     
     public init(
         cliPath: String = "copilot",
+        cliArgs: [String] = [],
         cwd: String? = nil,
         port: Int = 0,
         useStdio: Bool = true,
@@ -72,6 +76,7 @@ public struct CopilotClientOptions: Sendable {
         useLoggedInUser: Bool? = nil
     ) {
         self.cliPath = cliPath
+        self.cliArgs = cliArgs
         self.cwd = cwd
         self.port = port
         self.useStdio = useStdio
