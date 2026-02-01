@@ -66,40 +66,63 @@ public struct SessionEvent: Codable, Sendable {
 public enum SessionEventType: String, Codable, Sendable {
     // Session lifecycle
     case sessionStart = "session.start"
+    case sessionResume = "session.resume"
     case sessionIdle = "session.idle"
     case sessionError = "session.error"
-    case sessionResume = "session.resume"
+    case sessionInfo = "session.info"
+    case sessionModelChange = "session.model_change"
+    case sessionHandoff = "session.handoff"
+    case sessionTruncation = "session.truncation"
+    case sessionSnapshotRewind = "session.snapshot_rewind"
+    case sessionUsageInfo = "session.usage_info"
     case sessionResourceUpdate = "session.resource_update"
-    
+
     // Compaction
     case sessionCompactionStart = "session.compaction_start"
     case sessionCompactionComplete = "session.compaction_complete"
-    
-    // Assistant messages
-    case assistantMessage = "assistant.message"
-    case assistantMessageDelta = "assistant.message_delta"
-    case assistantReasoning = "assistant.reasoning"
-    case assistantReasoningDelta = "assistant.reasoning_delta"
-    
+
     // User messages
     case userMessage = "user.message"
-    
+    case pendingMessagesModified = "pending_messages.modified"
+
+    // Assistant turns and messages
+    case assistantTurnStart = "assistant.turn_start"
+    case assistantTurnEnd = "assistant.turn_end"
+    case assistantIntent = "assistant.intent"
+    case assistantReasoning = "assistant.reasoning"
+    case assistantReasoningDelta = "assistant.reasoning_delta"
+    case assistantMessage = "assistant.message"
+    case assistantMessageDelta = "assistant.message_delta"
+    case assistantUsage = "assistant.usage"
+
     // Tool execution
+    case toolUserRequested = "tool.user_requested"
     case toolExecutionStart = "tool.execution_start"
-    case toolExecutionComplete = "tool.execution_complete"
+    case toolExecutionPartialResult = "tool.execution_partial_result"
     case toolExecutionProgress = "tool.execution_progress"
-    
-    // Agent
+    case toolExecutionComplete = "tool.execution_complete"
+
+    // Subagents
+    case subagentStarted = "subagent.started"
+    case subagentCompleted = "subagent.completed"
+    case subagentFailed = "subagent.failed"
+    case subagentSelected = "subagent.selected"
+
+    // Agent (legacy)
     case agentSwitchStart = "agent.switch_start"
     case agentSwitchComplete = "agent.switch_complete"
-    
-    // Hook events
+
+    // Hooks
     case hookStart = "hook.start"
     case hookEnd = "hook.end"
-    
+
+    // System
+    case systemMessage = "system.message"
+    case abort = "abort"
+
     // Unknown for forward compatibility
     case unknown = "unknown"
-    
+
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         let rawValue = try container.decode(String.self)
@@ -112,58 +135,111 @@ public enum SessionEventType: String, Codable, Sendable {
 /// Data associated with a session event
 public enum SessionEventData: Sendable {
     case sessionStart(SessionStartData)
+    case sessionResume(SessionResumeData)
     case sessionIdle(SessionIdleData)
     case sessionError(SessionErrorData)
-    case sessionResume(SessionResumeData)
+    case sessionInfo(SessionInfoData)
+    case sessionModelChange(SessionModelChangeData)
+    case sessionHandoff(SessionHandoffData)
+    case sessionTruncation(SessionTruncationData)
+    case sessionSnapshotRewind(SessionSnapshotRewindData)
+    case sessionUsageInfo(SessionUsageInfoData)
     case sessionResourceUpdate(SessionResourceUpdateData)
     case sessionCompactionStart(SessionCompactionStartData)
     case sessionCompactionComplete(SessionCompactionCompleteData)
-    case assistantMessage(AssistantMessageData)
-    case assistantMessageDelta(AssistantMessageDeltaData)
+    case userMessage(UserMessageData)
+    case pendingMessagesModified(PendingMessagesModifiedData)
+    case assistantTurnStart(AssistantTurnStartData)
+    case assistantTurnEnd(AssistantTurnEndData)
+    case assistantIntent(AssistantIntentData)
     case assistantReasoning(AssistantReasoningData)
     case assistantReasoningDelta(AssistantReasoningDeltaData)
-    case userMessage(UserMessageData)
+    case assistantMessage(AssistantMessageData)
+    case assistantMessageDelta(AssistantMessageDeltaData)
+    case assistantUsage(AssistantUsageData)
+    case toolUserRequested(ToolUserRequestedData)
     case toolExecutionStart(ToolExecutionStartData)
-    case toolExecutionComplete(ToolExecutionCompleteData)
+    case toolExecutionPartialResult(ToolExecutionPartialResultData)
     case toolExecutionProgress(ToolExecutionProgressData)
+    case toolExecutionComplete(ToolExecutionCompleteData)
+    case subagentStarted(SubagentStartedData)
+    case subagentCompleted(SubagentCompletedData)
+    case subagentFailed(SubagentFailedData)
+    case subagentSelected(SubagentSelectedData)
     case agentSwitchStart(AgentSwitchStartData)
     case agentSwitchComplete(AgentSwitchCompleteData)
     case hookStart(HookStartData)
     case hookEnd(HookEndData)
+    case systemMessage(SystemMessageData)
+    case abort(AbortData)
     case unknown
-    
+
     init?(from decoder: Decoder, type: SessionEventType) throws {
         switch type {
         case .sessionStart:
             self = .sessionStart(try SessionStartData(from: decoder))
+        case .sessionResume:
+            self = .sessionResume(try SessionResumeData(from: decoder))
         case .sessionIdle:
             self = .sessionIdle(try SessionIdleData(from: decoder))
         case .sessionError:
             self = .sessionError(try SessionErrorData(from: decoder))
-        case .sessionResume:
-            self = .sessionResume(try SessionResumeData(from: decoder))
+        case .sessionInfo:
+            self = .sessionInfo(try SessionInfoData(from: decoder))
+        case .sessionModelChange:
+            self = .sessionModelChange(try SessionModelChangeData(from: decoder))
+        case .sessionHandoff:
+            self = .sessionHandoff(try SessionHandoffData(from: decoder))
+        case .sessionTruncation:
+            self = .sessionTruncation(try SessionTruncationData(from: decoder))
+        case .sessionSnapshotRewind:
+            self = .sessionSnapshotRewind(try SessionSnapshotRewindData(from: decoder))
+        case .sessionUsageInfo:
+            self = .sessionUsageInfo(try SessionUsageInfoData(from: decoder))
         case .sessionResourceUpdate:
             self = .sessionResourceUpdate(try SessionResourceUpdateData(from: decoder))
         case .sessionCompactionStart:
             self = .sessionCompactionStart(try SessionCompactionStartData(from: decoder))
         case .sessionCompactionComplete:
             self = .sessionCompactionComplete(try SessionCompactionCompleteData(from: decoder))
-        case .assistantMessage:
-            self = .assistantMessage(try AssistantMessageData(from: decoder))
-        case .assistantMessageDelta:
-            self = .assistantMessageDelta(try AssistantMessageDeltaData(from: decoder))
+        case .userMessage:
+            self = .userMessage(try UserMessageData(from: decoder))
+        case .pendingMessagesModified:
+            self = .pendingMessagesModified(try PendingMessagesModifiedData(from: decoder))
+        case .assistantTurnStart:
+            self = .assistantTurnStart(try AssistantTurnStartData(from: decoder))
+        case .assistantTurnEnd:
+            self = .assistantTurnEnd(try AssistantTurnEndData(from: decoder))
+        case .assistantIntent:
+            self = .assistantIntent(try AssistantIntentData(from: decoder))
         case .assistantReasoning:
             self = .assistantReasoning(try AssistantReasoningData(from: decoder))
         case .assistantReasoningDelta:
             self = .assistantReasoningDelta(try AssistantReasoningDeltaData(from: decoder))
-        case .userMessage:
-            self = .userMessage(try UserMessageData(from: decoder))
+        case .assistantMessage:
+            self = .assistantMessage(try AssistantMessageData(from: decoder))
+        case .assistantMessageDelta:
+            self = .assistantMessageDelta(try AssistantMessageDeltaData(from: decoder))
+        case .assistantUsage:
+            self = .assistantUsage(try AssistantUsageData(from: decoder))
+        case .toolUserRequested:
+            self = .toolUserRequested(try ToolUserRequestedData(from: decoder))
         case .toolExecutionStart:
             self = .toolExecutionStart(try ToolExecutionStartData(from: decoder))
-        case .toolExecutionComplete:
-            self = .toolExecutionComplete(try ToolExecutionCompleteData(from: decoder))
+        case .toolExecutionPartialResult:
+            self = .toolExecutionPartialResult(try ToolExecutionPartialResultData(from: decoder))
         case .toolExecutionProgress:
             self = .toolExecutionProgress(try ToolExecutionProgressData(from: decoder))
+        case .toolExecutionComplete:
+            self = .toolExecutionComplete(try ToolExecutionCompleteData(from: decoder))
+        case .subagentStarted:
+            self = .subagentStarted(try SubagentStartedData(from: decoder))
+        case .subagentCompleted:
+            self = .subagentCompleted(try SubagentCompletedData(from: decoder))
+        case .subagentFailed:
+            self = .subagentFailed(try SubagentFailedData(from: decoder))
+        case .subagentSelected:
+            self = .subagentSelected(try SubagentSelectedData(from: decoder))
         case .agentSwitchStart:
             self = .agentSwitchStart(try AgentSwitchStartData(from: decoder))
         case .agentSwitchComplete:
@@ -172,6 +248,10 @@ public enum SessionEventData: Sendable {
             self = .hookStart(try HookStartData(from: decoder))
         case .hookEnd:
             self = .hookEnd(try HookEndData(from: decoder))
+        case .systemMessage:
+            self = .systemMessage(try SystemMessageData(from: decoder))
+        case .abort:
+            self = .abort(try AbortData(from: decoder))
         case .unknown:
             self = .unknown
         }
@@ -195,6 +275,10 @@ public struct SessionIdleData: Codable, Sendable {
 
 public struct SessionErrorData: Codable, Sendable {
     public let type: String
+    public let message: String?
+    public let errorType: String?
+    public let stack: String?
+    // Legacy fields for backward compatibility
     public let error: String?
     public let code: String?
     public let sessionId: String?
@@ -324,4 +408,116 @@ public struct HookEndData: Codable, Sendable {
     public let hookName: String?
     public let sessionId: String?
     public let timestamp: Int64?
+}
+
+// MARK: - New Event Data Types (PR #2 + PR #3)
+
+public struct SessionInfoData: Codable, Sendable {
+    public let type: String
+    public let infoType: String?
+    public let message: String?
+}
+
+public struct SessionModelChangeData: Codable, Sendable {
+    public let type: String
+    public let previousModel: String?
+    public let newModel: String?
+}
+
+public struct SessionHandoffData: Codable, Sendable {
+    public let type: String
+    public let handoffTime: String?
+    public let sourceType: String?
+    public let context: String?
+    public let summary: String?
+}
+
+public struct SessionTruncationData: Codable, Sendable {
+    public let type: String
+    public let tokenLimit: Int?
+    public let tokensRemoved: Int?
+}
+
+public struct SessionSnapshotRewindData: Codable, Sendable {
+    public let type: String
+    public let upToEventId: String?
+    public let eventsRemoved: Int?
+}
+
+public struct SessionUsageInfoData: Codable, Sendable {
+    public let type: String
+    public let tokenLimit: Int?
+    public let currentTokens: Int?
+}
+
+public struct PendingMessagesModifiedData: Codable, Sendable {
+    public let type: String
+}
+
+public struct AssistantTurnStartData: Codable, Sendable {
+    public let type: String
+    public let turnId: String?
+}
+
+public struct AssistantTurnEndData: Codable, Sendable {
+    public let type: String
+    public let turnId: String?
+}
+
+public struct AssistantIntentData: Codable, Sendable {
+    public let type: String
+    public let intent: String?
+}
+
+public struct AssistantUsageData: Codable, Sendable {
+    public let type: String
+    public let model: String?
+    public let inputTokens: Int?
+    public let outputTokens: Int?
+}
+
+public struct ToolUserRequestedData: Codable, Sendable {
+    public let type: String
+    public let toolCallId: String?
+    public let toolName: String?
+}
+
+public struct ToolExecutionPartialResultData: Codable, Sendable {
+    public let type: String
+    public let toolCallId: String?
+    public let partialOutput: String?
+}
+
+public struct SubagentStartedData: Codable, Sendable {
+    public let type: String
+    public let toolCallId: String?
+    public let agentName: String?
+}
+
+public struct SubagentCompletedData: Codable, Sendable {
+    public let type: String
+    public let toolCallId: String?
+    public let agentName: String?
+}
+
+public struct SubagentFailedData: Codable, Sendable {
+    public let type: String
+    public let toolCallId: String?
+    public let agentName: String?
+    public let error: String?
+}
+
+public struct SubagentSelectedData: Codable, Sendable {
+    public let type: String
+    public let agentName: String?
+}
+
+public struct SystemMessageData: Codable, Sendable {
+    public let type: String
+    public let content: String?
+}
+
+public struct AbortData: Codable, Sendable {
+    public let type: String
+    public let reason: String?
 }

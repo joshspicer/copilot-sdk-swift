@@ -28,8 +28,10 @@ public actor StdioTransport: Transport {
         stderr = Pipe()
         
         process.executableURL = URL(fileURLWithPath: options.cliPath)
-        
-        var arguments = ["server", "--transport", "stdio"]
+
+        // Build arguments: user-provided args first, then SDK-managed args
+        var arguments = options.cliArgs
+        arguments.append(contentsOf: ["server", "--transport", "stdio"])
         if !options.logLevel.isEmpty {
             arguments.append(contentsOf: ["--log-level", options.logLevel])
         }
@@ -208,53 +210,56 @@ public actor StdioTransport: Transport {
 public actor TCPTransport: Transport {
     private let host: String
     private let port: Int
+    #if canImport(Network)
     private var connection: NWConnection?
+    #else
+    private var connection: Any?
+    #endif
     private var buffer = Data()
     private let encoder = JSONEncoder()
     private var isConnected = false
-    
-    #if canImport(Network)
-    /// Create a new TCP transport with the given host and port
-    public init(host: String, port: Int) {
-        self.host = host
-        self.port = port
-    }
-    
+
     /// Parse a CLI URL into host and port
     public static func parseUrl(_ urlString: String) -> (host: String, port: Int)? {
         // Handle various formats:
         // - "8080" -> localhost:8080
         // - "host:8080" -> host:8080
         // - "http://host:8080" -> host:8080
-        
+
         var cleanUrl = urlString
-        
+
         // Remove http:// or https:// prefix
         if cleanUrl.hasPrefix("http://") {
             cleanUrl = String(cleanUrl.dropFirst(7))
         } else if cleanUrl.hasPrefix("https://") {
             cleanUrl = String(cleanUrl.dropFirst(8))
         }
-        
+
         // Remove trailing path
         if let slashIndex = cleanUrl.firstIndex(of: "/") {
             cleanUrl = String(cleanUrl[..<slashIndex])
         }
-        
+
         // Check if it's just a port number
         if let port = Int(cleanUrl) {
             return ("localhost", port)
         }
-        
+
         // Parse host:port
         let parts = cleanUrl.split(separator: ":")
         if parts.count == 2, let port = Int(parts[1]) {
             return (String(parts[0]), port)
         }
-        
+
         return nil
     }
-    
+
+    #if canImport(Network)
+    /// Create a new TCP transport with the given host and port
+    public init(host: String, port: Int) {
+        self.host = host
+        self.port = port
+    }
     /// Connect to the server
     public func connect() async throws {
         let nwEndpoint = NWEndpoint.hostPort(
