@@ -89,8 +89,8 @@ public actor CopilotClient {
                 await handler.start()
             }
             
-            // Verify connection with ping
-            let pingResponse = try await ping()
+            // Verify connection with ping (use internal version to avoid ensureConnected check)
+            let pingResponse = try await pingInternal()
             
             // Check protocol version
             if let serverVersion = pingResponse.protocolVersion, serverVersion != sdkProtocolVersion {
@@ -155,7 +155,11 @@ public actor CopilotClient {
     /// - Returns: Ping response with server info
     public func ping() async throws -> PingResponse {
         try await ensureConnected()
-        
+        return try await pingInternal()
+    }
+    
+    /// Internal ping without ensureConnected check (used during connection)
+    private func pingInternal() async throws -> PingResponse {
         guard let handler = rpcHandler else {
             throw CopilotError.notConnected
         }
@@ -172,7 +176,7 @@ public actor CopilotClient {
             protocolVersion: dict["protocolVersion"] as? Int
         )
     }
-    
+
     /// Get server status
     /// - Returns: Server status including version info
     public func getStatus() async throws -> GetStatusResponse {
