@@ -178,10 +178,10 @@ public actor CopilotSession {
     /// Handle a permission request from the server
     func handlePermissionRequest(_ request: PermissionRequest) async throws -> PermissionRequestResult {
         guard let handler = onPermissionRequest else {
-            // Default: allow
-            return PermissionRequestResult(kind: "allow")
+            // Default: deny when no handler is registered (security best practice)
+            return PermissionRequestResult(kind: "denied-no-approval-rule-and-could-not-request-from-user")
         }
-        
+
         let invocation = PermissionInvocation(sessionId: sessionId)
         return try await handler(request, invocation)
     }
@@ -298,7 +298,7 @@ extension CopilotSession {
             
             if event.type == .sessionError {
                 if case .sessionError(let errorData) = event.data {
-                    throw CopilotError.toolError(message: errorData.error ?? "Unknown session error")
+                    throw CopilotError.toolError(message: errorData.message)
                 }
                 throw CopilotError.toolError(message: "Session error occurred")
             }
@@ -320,12 +320,33 @@ extension CopilotSession {
         // Find the last assistant message
         for event in events.reversed() {
             if event.type == .assistantMessage,
-               case .assistantMessage(let messageData) = event.data,
-               let content = messageData.content {
-                return content
+               case .assistantMessage(let messageData) = event.data {
+                return messageData.content
             }
         }
         
         throw CopilotError.invalidResponse
+    }
+
+    /// Send a message and wait for the response to complete
+    /// - Parameters:
+    ///   - options: The message options including prompt and attachments
+    ///   - timeout: Maximum time to wait for completion
+    /// - Returns: Array of session events received during the interaction
+    @discardableResult
+    public func sendAndWait(_ options: MessageOptions, timeout: TimeInterval = 60) async throws -> [SessionEvent] {
+        try await send(options)
+        return try await waitForIdle(timeout: timeout)
+    }
+
+    /// Send a prompt and wait for the response to complete
+    /// - Parameters:
+    ///   - prompt: The prompt text to send
+    ///   - timeout: Maximum time to wait for completion
+    /// - Returns: Array of session events received during the interaction
+    @discardableResult
+    public func sendAndWait(_ prompt: String, timeout: TimeInterval = 60) async throws -> [SessionEvent] {
+        try await send(prompt)
+        return try await waitForIdle(timeout: timeout)
     }
 }

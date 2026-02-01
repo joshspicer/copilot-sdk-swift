@@ -20,7 +20,10 @@ public enum ConnectionState: String, Codable, Sendable {
 public struct CopilotClientOptions: Sendable {
     /// Path to the Copilot CLI executable (default: "copilot")
     public var cliPath: String
-    
+
+    /// Extra arguments to pass to the CLI executable (inserted before SDK-managed args)
+    public var cliArgs: [String]
+
     /// Working directory for the CLI process (default: current directory)
     public var cwd: String?
     
@@ -60,6 +63,7 @@ public struct CopilotClientOptions: Sendable {
     
     public init(
         cliPath: String = "copilot",
+        cliArgs: [String] = [],
         cwd: String? = nil,
         port: Int = 0,
         useStdio: Bool = true,
@@ -72,6 +76,7 @@ public struct CopilotClientOptions: Sendable {
         useLoggedInUser: Bool? = nil
     ) {
         self.cliPath = cliPath
+        self.cliArgs = cliArgs
         self.cwd = cwd
         self.port = port
         self.useStdio = useStdio
@@ -718,23 +723,27 @@ public struct UserInputResponse: Codable, Sendable {
 public struct Attachment: Codable, Sendable {
     /// The type of attachment ("file" or "directory")
     public var type: String
-    
+
     /// The path to the file or directory
     public var path: String
-    
-    public init(type: String, path: String) {
+
+    /// Optional display name for the attachment
+    public var displayName: String?
+
+    public init(type: String, path: String, displayName: String? = nil) {
         self.type = type
         self.path = path
+        self.displayName = displayName
     }
-    
+
     /// Creates a file attachment
-    public static func file(_ path: String) -> Attachment {
-        Attachment(type: "file", path: path)
+    public static func file(_ path: String, displayName: String? = nil) -> Attachment {
+        Attachment(type: "file", path: path, displayName: displayName)
     }
-    
+
     /// Creates a directory attachment
-    public static func directory(_ path: String) -> Attachment {
-        Attachment(type: "directory", path: path)
+    public static func directory(_ path: String, displayName: String? = nil) -> Attachment {
+        Attachment(type: "directory", path: path, displayName: displayName)
     }
 }
 

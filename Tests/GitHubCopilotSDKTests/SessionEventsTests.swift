@@ -28,22 +28,33 @@ final class SessionEventsTests: XCTestCase {
     func testDecodeSessionStartEvent() throws {
         let json = """
         {
+            "id": "event-1",
+            "timestamp": "2024-01-01T00:00:00Z",
+            "parentId": null,
+            "ephemeral": false,
             "type": "session.start",
-            "sessionId": "test-session-123",
-            "model": "gpt-4",
-            "timestamp": 1234567890
+            "data": {
+                "sessionId": "test-session-123",
+                "version": 2,
+                "producer": "copilot-cli",
+                "copilotVersion": "1.0.0",
+                "startTime": "2024-01-01T00:00:00Z",
+                "selectedModel": "gpt-4"
+            }
         }
         """
-        
+
         let decoder = JSONDecoder()
         let event = try decoder.decode(SessionEvent.self, from: json.data(using: .utf8)!)
-        
+
         XCTAssertEqual(event.type, .sessionStart)
-        
+        XCTAssertEqual(event.id, "event-1")
+        XCTAssertEqual(event.timestamp, "2024-01-01T00:00:00Z")
+
         if case .sessionStart(let data) = event.data {
             XCTAssertEqual(data.sessionId, "test-session-123")
-            XCTAssertEqual(data.model, "gpt-4")
-            XCTAssertEqual(data.timestamp, 1234567890)
+            XCTAssertEqual(data.version, 2)
+            XCTAssertEqual(data.selectedModel, "gpt-4")
         } else {
             XCTFail("Expected sessionStart data")
         }
@@ -52,37 +63,44 @@ final class SessionEventsTests: XCTestCase {
     func testDecodeSessionIdleEvent() throws {
         let json = """
         {
-            "type": "session.idle",
-            "sessionId": "idle-session",
-            "timestamp": 1234567891
+            "id": "event-2",
+            "timestamp": "2024-01-01T00:00:01Z",
+            "parentId": null,
+            "type": "session.idle"
         }
         """
-        
+
         let decoder = JSONDecoder()
         let event = try decoder.decode(SessionEvent.self, from: json.data(using: .utf8)!)
-        
+
         XCTAssertEqual(event.type, .sessionIdle)
+        XCTAssertEqual(event.id, "event-2")
     }
-    
+
     func testDecodeSessionErrorEvent() throws {
         let json = """
         {
+            "id": "event-3",
+            "timestamp": "2024-01-01T00:00:02Z",
+            "parentId": null,
             "type": "session.error",
-            "error": "Something went wrong",
-            "code": "INTERNAL_ERROR",
-            "sessionId": "error-session",
-            "timestamp": 1234567892
+            "data": {
+                "errorType": "InternalError",
+                "message": "Something went wrong",
+                "stack": "Error at line 123"
+            }
         }
         """
-        
+
         let decoder = JSONDecoder()
         let event = try decoder.decode(SessionEvent.self, from: json.data(using: .utf8)!)
-        
+
         XCTAssertEqual(event.type, .sessionError)
-        
+
         if case .sessionError(let data) = event.data {
-            XCTAssertEqual(data.error, "Something went wrong")
-            XCTAssertEqual(data.code, "INTERNAL_ERROR")
+            XCTAssertEqual(data.errorType, "InternalError")
+            XCTAssertEqual(data.message, "Something went wrong")
+            XCTAssertEqual(data.stack, "Error at line 123")
         } else {
             XCTFail("Expected sessionError data")
         }
@@ -163,24 +181,28 @@ final class SessionEventsTests: XCTestCase {
     func testDecodeToolExecutionCompleteEvent() throws {
         let json = """
         {
+            "id": "event-7",
+            "timestamp": "2024-01-01T00:00:07Z",
+            "parentId": null,
             "type": "tool.execution_complete",
-            "toolName": "read_file",
-            "toolCallId": "call-456",
-            "result": "file contents here",
-            "resultType": "success",
-            "sessionId": "tool-session",
-            "timestamp": 1234567896
+            "data": {
+                "toolCallId": "call-456",
+                "success": true,
+                "result": {
+                    "content": "file contents here"
+                }
+            }
         }
         """
-        
+
         let decoder = JSONDecoder()
         let event = try decoder.decode(SessionEvent.self, from: json.data(using: .utf8)!)
-        
+
         XCTAssertEqual(event.type, .toolExecutionComplete)
-        
+
         if case .toolExecutionComplete(let data) = event.data {
-            XCTAssertEqual(data.toolName, "read_file")
-            XCTAssertEqual(data.resultType, "success")
+            XCTAssertEqual(data.toolCallId, "call-456")
+            XCTAssertEqual(data.success, true)
         } else {
             XCTFail("Expected toolExecutionComplete data")
         }
@@ -212,33 +234,40 @@ final class SessionEventsTests: XCTestCase {
     func testDecodeCompactionEvents() throws {
         let startJson = """
         {
-            "type": "session.compaction_start",
-            "sessionId": "compaction-session",
-            "timestamp": 1234567898
+            "id": "event-9",
+            "timestamp": "2024-01-01T00:00:09Z",
+            "parentId": null,
+            "type": "session.compaction_start"
         }
         """
-        
+
         let completeJson = """
         {
+            "id": "event-10",
+            "timestamp": "2024-01-01T00:00:10Z",
+            "parentId": null,
             "type": "session.compaction_complete",
-            "sessionId": "compaction-session",
-            "tokensBefore": 100000,
-            "tokensAfter": 50000,
-            "timestamp": 1234567899
+            "data": {
+                "success": true,
+                "preCompactionTokens": 100000,
+                "postCompactionTokens": 50000,
+                "tokensRemoved": 50000
+            }
         }
         """
-        
+
         let decoder = JSONDecoder()
-        
+
         let startEvent = try decoder.decode(SessionEvent.self, from: startJson.data(using: .utf8)!)
         XCTAssertEqual(startEvent.type, .sessionCompactionStart)
-        
+
         let completeEvent = try decoder.decode(SessionEvent.self, from: completeJson.data(using: .utf8)!)
         XCTAssertEqual(completeEvent.type, .sessionCompactionComplete)
-        
+
         if case .sessionCompactionComplete(let data) = completeEvent.data {
-            XCTAssertEqual(data.tokensBefore, 100000)
-            XCTAssertEqual(data.tokensAfter, 50000)
+            XCTAssertEqual(data.success, true)
+            XCTAssertEqual(data.preCompactionTokens, 100000)
+            XCTAssertEqual(data.postCompactionTokens, 50000)
         } else {
             XCTFail("Expected compaction complete data")
         }
@@ -265,7 +294,13 @@ final class SessionEventsTests: XCTestCase {
     // MARK: - Event Creation Tests
     
     func testCreateSessionEvent() {
-        let event = SessionEvent(type: .sessionIdle, data: nil)
+        let event = SessionEvent(
+            id: "test-1",
+            timestamp: "2024-01-01T00:00:00Z",
+            type: .sessionIdle,
+            data: nil
+        )
         XCTAssertEqual(event.type, .sessionIdle)
+        XCTAssertEqual(event.id, "test-1")
     }
 }
