@@ -17,43 +17,68 @@ import Foundation
 
 /// Represents a session event from the Copilot CLI
 public struct SessionEvent: Codable, Sendable {
+    /// Unique event identifier
+    public let id: String
+
+    /// ISO 8601 timestamp
+    public let timestamp: String
+
+    /// Parent event ID for nested events
+    public let parentId: String?
+
+    /// Whether this event is ephemeral (not persisted in session history)
+    public let ephemeral: Bool?
+
     /// The type of event
     public let type: SessionEventType
-    
+
     /// The data associated with this event
     public let data: SessionEventData?
-    
+
     /// Raw JSON data for forward compatibility
     private let rawData: AnyCodable?
-    
+
     enum CodingKeys: String, CodingKey {
-        case type
+        case id, timestamp, parentId, ephemeral, type, data
     }
-    
+
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        
+
+        id = try container.decode(String.self, forKey: .id)
+        timestamp = try container.decode(String.self, forKey: .timestamp)
+        parentId = try container.decodeIfPresent(String.self, forKey: .parentId)
+        ephemeral = try container.decodeIfPresent(Bool.self, forKey: .ephemeral)
+
         // Decode the type, mapping unknown types to .unknown
         let typeString = try container.decode(String.self, forKey: .type)
         self.type = SessionEventType(rawValue: typeString) ?? .unknown
-        
+
         // Try to decode the full event data based on type
         let singleContainer = try decoder.singleValueContainer()
         self.rawData = try? singleContainer.decode(AnyCodable.self)
         self.data = try? SessionEventData(from: decoder, type: type)
     }
-    
+
     public func encode(to encoder: Encoder) throws {
         if let rawData = rawData {
             var container = encoder.singleValueContainer()
             try container.encode(rawData)
         } else {
             var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(id, forKey: .id)
+            try container.encode(timestamp, forKey: .timestamp)
+            try container.encodeIfPresent(parentId, forKey: .parentId)
+            try container.encodeIfPresent(ephemeral, forKey: .ephemeral)
             try container.encode(type.rawValue, forKey: .type)
         }
     }
-    
-    public init(type: SessionEventType, data: SessionEventData? = nil) {
+
+    public init(id: String, timestamp: String, parentId: String? = nil, ephemeral: Bool? = nil, type: SessionEventType, data: SessionEventData? = nil) {
+        self.id = id
+        self.timestamp = timestamp
+        self.parentId = parentId
+        self.ephemeral = ephemeral
         self.type = type
         self.data = data
         self.rawData = nil
@@ -75,7 +100,6 @@ public enum SessionEventType: String, Codable, Sendable {
     case sessionTruncation = "session.truncation"
     case sessionSnapshotRewind = "session.snapshot_rewind"
     case sessionUsageInfo = "session.usage_info"
-    case sessionResourceUpdate = "session.resource_update"
 
     // Compaction
     case sessionCompactionStart = "session.compaction_start"
@@ -144,7 +168,6 @@ public enum SessionEventData: Sendable {
     case sessionTruncation(SessionTruncationData)
     case sessionSnapshotRewind(SessionSnapshotRewindData)
     case sessionUsageInfo(SessionUsageInfoData)
-    case sessionResourceUpdate(SessionResourceUpdateData)
     case sessionCompactionStart(SessionCompactionStartData)
     case sessionCompactionComplete(SessionCompactionCompleteData)
     case userMessage(UserMessageData)
@@ -196,8 +219,6 @@ public enum SessionEventData: Sendable {
             self = .sessionSnapshotRewind(try SessionSnapshotRewindData(from: decoder))
         case .sessionUsageInfo:
             self = .sessionUsageInfo(try SessionUsageInfoData(from: decoder))
-        case .sessionResourceUpdate:
-            self = .sessionResourceUpdate(try SessionResourceUpdateData(from: decoder))
         case .sessionCompactionStart:
             self = .sessionCompactionStart(try SessionCompactionStartData(from: decoder))
         case .sessionCompactionComplete:
@@ -260,264 +281,340 @@ public enum SessionEventData: Sendable {
 
 // MARK: - Event Data Types
 
+// Session Events
 public struct SessionStartData: Codable, Sendable {
-    public let type: String
-    public let sessionId: String?
-    public let model: String?
-    public let timestamp: Int64?
-}
+    public struct Context: Codable, Sendable {
+        public let cwd: String
+        public let gitRoot: String?
+        public let repository: String?
+        public let branch: String?
+    }
 
-public struct SessionIdleData: Codable, Sendable {
-    public let type: String
-    public let sessionId: String?
-    public let timestamp: Int64?
-}
-
-public struct SessionErrorData: Codable, Sendable {
-    public let type: String
-    public let message: String?
-    public let errorType: String?
-    public let stack: String?
-    // Legacy fields for backward compatibility
-    public let error: String?
-    public let code: String?
-    public let sessionId: String?
-    public let timestamp: Int64?
+    public let sessionId: String
+    public let version: Int
+    public let producer: String
+    public let copilotVersion: String
+    public let startTime: String
+    public let selectedModel: String?
+    public let context: Context?
 }
 
 public struct SessionResumeData: Codable, Sendable {
-    public let type: String
-    public let sessionId: String?
-    public let timestamp: Int64?
+    public struct Context: Codable, Sendable {
+        public let cwd: String
+        public let gitRoot: String?
+        public let repository: String?
+        public let branch: String?
+    }
+
+    public let resumeTime: String
+    public let eventCount: Int
+    public let context: Context?
 }
 
-public struct SessionResourceUpdateData: Codable, Sendable {
-    public let type: String
-    public let contextUtilization: Double?
-    public let totalTokens: Int?
-    public let maxTokens: Int?
-    public let sessionId: String?
-    public let timestamp: Int64?
+public struct SessionIdleData: Codable, Sendable {
+    // Empty data object
 }
 
-public struct SessionCompactionStartData: Codable, Sendable {
-    public let type: String
-    public let sessionId: String?
-    public let timestamp: Int64?
+public struct SessionErrorData: Codable, Sendable {
+    public let errorType: String
+    public let message: String
+    public let stack: String?
 }
-
-public struct SessionCompactionCompleteData: Codable, Sendable {
-    public let type: String
-    public let sessionId: String?
-    public let tokensBefore: Int?
-    public let tokensAfter: Int?
-    public let timestamp: Int64?
-}
-
-public struct AssistantMessageData: Codable, Sendable {
-    public let type: String
-    public let content: String?
-    public let messageId: String?
-    public let sessionId: String?
-    public let timestamp: Int64?
-}
-
-public struct AssistantMessageDeltaData: Codable, Sendable {
-    public let type: String
-    public let deltaContent: String?
-    public let messageId: String?
-    public let sessionId: String?
-    public let timestamp: Int64?
-}
-
-public struct AssistantReasoningData: Codable, Sendable {
-    public let type: String
-    public let content: String?
-    public let messageId: String?
-    public let sessionId: String?
-    public let timestamp: Int64?
-}
-
-public struct AssistantReasoningDeltaData: Codable, Sendable {
-    public let type: String
-    public let deltaContent: String?
-    public let messageId: String?
-    public let sessionId: String?
-    public let timestamp: Int64?
-}
-
-public struct UserMessageData: Codable, Sendable {
-    public let type: String
-    public let content: String?
-    public let messageId: String?
-    public let sessionId: String?
-    public let timestamp: Int64?
-}
-
-public struct ToolExecutionStartData: Codable, Sendable {
-    public let type: String
-    public let toolName: String?
-    public let toolCallId: String?
-    public let arguments: AnyCodable?
-    public let sessionId: String?
-    public let timestamp: Int64?
-}
-
-public struct ToolExecutionCompleteData: Codable, Sendable {
-    public let type: String
-    public let toolName: String?
-    public let toolCallId: String?
-    public let result: AnyCodable?
-    public let resultType: String?
-    public let sessionId: String?
-    public let timestamp: Int64?
-}
-
-public struct ToolExecutionProgressData: Codable, Sendable {
-    public let type: String
-    public let toolName: String?
-    public let toolCallId: String?
-    public let progress: String?
-    public let sessionId: String?
-    public let timestamp: Int64?
-}
-
-public struct AgentSwitchStartData: Codable, Sendable {
-    public let type: String
-    public let agentName: String?
-    public let sessionId: String?
-    public let timestamp: Int64?
-}
-
-public struct AgentSwitchCompleteData: Codable, Sendable {
-    public let type: String
-    public let agentName: String?
-    public let sessionId: String?
-    public let timestamp: Int64?
-}
-
-public struct HookStartData: Codable, Sendable {
-    public let type: String
-    public let hookName: String?
-    public let sessionId: String?
-    public let timestamp: Int64?
-}
-
-public struct HookEndData: Codable, Sendable {
-    public let type: String
-    public let hookName: String?
-    public let sessionId: String?
-    public let timestamp: Int64?
-}
-
-// MARK: - New Event Data Types (PR #2 + PR #3)
 
 public struct SessionInfoData: Codable, Sendable {
-    public let type: String
-    public let infoType: String?
-    public let message: String?
+    public let infoType: String
+    public let message: String
 }
 
 public struct SessionModelChangeData: Codable, Sendable {
-    public let type: String
     public let previousModel: String?
-    public let newModel: String?
+    public let newModel: String
 }
 
 public struct SessionHandoffData: Codable, Sendable {
-    public let type: String
-    public let handoffTime: String?
-    public let sourceType: String?
+    public struct Repository: Codable, Sendable {
+        public let owner: String
+        public let name: String
+        public let branch: String?
+    }
+
+    public let handoffTime: String
+    public let sourceType: String // "remote" | "local"
+    public let repository: Repository?
     public let context: String?
     public let summary: String?
+    public let remoteSessionId: String?
 }
 
 public struct SessionTruncationData: Codable, Sendable {
-    public let type: String
-    public let tokenLimit: Int?
-    public let tokensRemoved: Int?
+    public let tokenLimit: Int
+    public let preTruncationTokensInMessages: Int
+    public let preTruncationMessagesLength: Int
+    public let postTruncationTokensInMessages: Int
+    public let postTruncationMessagesLength: Int
+    public let tokensRemovedDuringTruncation: Int
+    public let messagesRemovedDuringTruncation: Int
+    public let performedBy: String
 }
 
 public struct SessionSnapshotRewindData: Codable, Sendable {
-    public let type: String
-    public let upToEventId: String?
-    public let eventsRemoved: Int?
+    public let upToEventId: String
+    public let eventsRemoved: Int
 }
 
 public struct SessionUsageInfoData: Codable, Sendable {
-    public let type: String
-    public let tokenLimit: Int?
-    public let currentTokens: Int?
+    public let tokenLimit: Int
+    public let currentTokens: Int
+    public let messagesLength: Int
+}
+
+public struct SessionCompactionStartData: Codable, Sendable {
+    // Empty data object
+}
+
+public struct SessionCompactionCompleteData: Codable, Sendable {
+    public struct CompactionTokensUsed: Codable, Sendable {
+        public let input: Int
+        public let output: Int
+        public let cachedInput: Int
+    }
+
+    public let success: Bool
+    public let error: String?
+    public let preCompactionTokens: Int?
+    public let postCompactionTokens: Int?
+    public let preCompactionMessagesLength: Int?
+    public let messagesRemoved: Int?
+    public let tokensRemoved: Int?
+    public let summaryContent: String?
+    public let compactionTokensUsed: CompactionTokensUsed?
+}
+
+// User Message Events
+public struct UserMessageData: Codable, Sendable {
+    public struct FileAttachment: Codable, Sendable {
+        public let type: String // "file"
+        public let path: String
+        public let displayName: String
+    }
+
+    public struct DirectoryAttachment: Codable, Sendable {
+        public let type: String // "directory"
+        public let path: String
+        public let displayName: String
+    }
+
+    public struct SelectionAttachment: Codable, Sendable {
+        public struct Position: Codable, Sendable {
+            public let line: Int
+            public let character: Int
+        }
+
+        public struct Selection: Codable, Sendable {
+            public let start: Position
+            public let end: Position
+        }
+
+        public let type: String // "selection"
+        public let filePath: String
+        public let displayName: String
+        public let text: String
+        public let selection: Selection
+    }
+
+    public let content: String
+    public let transformedContent: String?
+    public let attachments: [AnyCodable]? // Mixed array of attachment types
+    public let source: String?
 }
 
 public struct PendingMessagesModifiedData: Codable, Sendable {
-    public let type: String
+    // Empty data object
 }
 
+// Assistant Events
 public struct AssistantTurnStartData: Codable, Sendable {
-    public let type: String
-    public let turnId: String?
+    public let turnId: String
 }
 
 public struct AssistantTurnEndData: Codable, Sendable {
-    public let type: String
-    public let turnId: String?
+    public let turnId: String
 }
 
 public struct AssistantIntentData: Codable, Sendable {
-    public let type: String
-    public let intent: String?
+    public let intent: String
+}
+
+public struct AssistantReasoningData: Codable, Sendable {
+    public let reasoningId: String
+    public let content: String
+}
+
+public struct AssistantReasoningDeltaData: Codable, Sendable {
+    public let reasoningId: String
+    public let deltaContent: String
+}
+
+public struct AssistantMessageData: Codable, Sendable {
+    public struct ToolRequest: Codable, Sendable {
+        public let toolCallId: String
+        public let name: String
+        public let arguments: AnyCodable?
+        public let type: String? // "function" | "custom"
+    }
+
+    public let messageId: String
+    public let content: String
+    public let toolRequests: [ToolRequest]?
+    public let parentToolCallId: String?
+}
+
+public struct AssistantMessageDeltaData: Codable, Sendable {
+    public let messageId: String
+    public let deltaContent: String
+    public let totalResponseSizeBytes: Int?
+    public let parentToolCallId: String?
 }
 
 public struct AssistantUsageData: Codable, Sendable {
-    public let type: String
+    public struct QuotaSnapshot: Codable, Sendable {
+        public let isUnlimitedEntitlement: Bool
+        public let entitlementRequests: Int
+        public let usedRequests: Int
+        public let usageAllowedWithExhaustedQuota: Bool
+        public let overage: Int
+        public let overageAllowedWithExhaustedQuota: Bool
+        public let remainingPercentage: Int
+        public let resetDate: String?
+    }
+
     public let model: String?
     public let inputTokens: Int?
     public let outputTokens: Int?
+    public let cacheReadTokens: Int?
+    public let cacheWriteTokens: Int?
+    public let cost: Double?
+    public let duration: Double?
+    public let initiator: String?
+    public let apiCallId: String?
+    public let providerCallId: String?
+    public let quotaSnapshots: [String: QuotaSnapshot]?
 }
 
+// Tool Events
 public struct ToolUserRequestedData: Codable, Sendable {
-    public let type: String
-    public let toolCallId: String?
-    public let toolName: String?
+    public let toolCallId: String
+    public let toolName: String
+    public let arguments: AnyCodable?
+}
+
+public struct ToolExecutionStartData: Codable, Sendable {
+    public let toolCallId: String
+    public let toolName: String
+    public let arguments: AnyCodable?
+    public let mcpServerName: String?
+    public let mcpToolName: String?
+    public let parentToolCallId: String?
 }
 
 public struct ToolExecutionPartialResultData: Codable, Sendable {
-    public let type: String
-    public let toolCallId: String?
-    public let partialOutput: String?
+    public let toolCallId: String
+    public let partialOutput: String
 }
 
+public struct ToolExecutionProgressData: Codable, Sendable {
+    public let toolCallId: String
+    public let progressMessage: String
+}
+
+public struct ToolExecutionCompleteData: Codable, Sendable {
+    public struct Result: Codable, Sendable {
+        public let content: String
+        public let detailedContent: String?
+    }
+
+    public struct Error: Codable, Sendable {
+        public let message: String
+        public let code: String?
+    }
+
+    public let toolCallId: String
+    public let success: Bool
+    public let isUserRequested: Bool?
+    public let result: Result?
+    public let error: Error?
+    public let toolTelemetry: [String: AnyCodable]?
+    public let parentToolCallId: String?
+}
+
+// Subagent Events
 public struct SubagentStartedData: Codable, Sendable {
-    public let type: String
-    public let toolCallId: String?
-    public let agentName: String?
+    public let toolCallId: String
+    public let agentName: String
+    public let agentDisplayName: String
+    public let agentDescription: String
 }
 
 public struct SubagentCompletedData: Codable, Sendable {
-    public let type: String
-    public let toolCallId: String?
-    public let agentName: String?
+    public let toolCallId: String
+    public let agentName: String
 }
 
 public struct SubagentFailedData: Codable, Sendable {
-    public let type: String
-    public let toolCallId: String?
-    public let agentName: String?
-    public let error: String?
+    public let toolCallId: String
+    public let agentName: String
+    public let error: String
 }
 
 public struct SubagentSelectedData: Codable, Sendable {
-    public let type: String
-    public let agentName: String?
+    public let agentName: String
+    public let agentDisplayName: String
+    public let tools: [String]? // null means all tools
 }
 
+// Hook Events
+public struct HookStartData: Codable, Sendable {
+    public let hookInvocationId: String
+    public let hookType: String
+    public let input: AnyCodable?
+}
+
+public struct HookEndData: Codable, Sendable {
+    public struct HookError: Codable, Sendable {
+        public let message: String
+        public let stack: String?
+    }
+
+    public let hookInvocationId: String
+    public let hookType: String
+    public let output: AnyCodable?
+    public let success: Bool
+    public let error: HookError?
+}
+
+// System Events
 public struct SystemMessageData: Codable, Sendable {
-    public let type: String
-    public let content: String?
+    public struct Metadata: Codable, Sendable {
+        public let promptVersion: String?
+        public let variables: [String: AnyCodable]?
+    }
+
+    public let content: String
+    public let role: String // "system" | "developer"
+    public let name: String?
+    public let metadata: Metadata?
 }
 
 public struct AbortData: Codable, Sendable {
-    public let type: String
-    public let reason: String?
+    public let reason: String
+}
+
+// Agent Events (legacy)
+public struct AgentSwitchStartData: Codable, Sendable {
+    public let agentName: String
+}
+
+public struct AgentSwitchCompleteData: Codable, Sendable {
+    public let agentName: String
 }
