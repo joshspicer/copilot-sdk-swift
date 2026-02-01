@@ -298,7 +298,7 @@ extension CopilotSession {
             
             if event.type == .sessionError {
                 if case .sessionError(let errorData) = event.data {
-                    throw CopilotError.toolError(message: errorData.error ?? "Unknown session error")
+                    throw CopilotError.toolError(message: errorData.message)
                 }
                 throw CopilotError.toolError(message: "Session error occurred")
             }
@@ -320,9 +320,8 @@ extension CopilotSession {
         // Find the last assistant message
         for event in events.reversed() {
             if event.type == .assistantMessage,
-               case .assistantMessage(let messageData) = event.data,
-               let content = messageData.content {
-                return content
+               case .assistantMessage(let messageData) = event.data {
+                return messageData.content
             }
         }
         

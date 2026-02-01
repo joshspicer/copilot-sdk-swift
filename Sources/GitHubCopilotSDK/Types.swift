@@ -718,23 +718,27 @@ public struct UserInputResponse: Codable, Sendable {
 public struct Attachment: Codable, Sendable {
     /// The type of attachment ("file" or "directory")
     public var type: String
-    
+
     /// The path to the file or directory
     public var path: String
-    
-    public init(type: String, path: String) {
+
+    /// Optional display name for the attachment
+    public var displayName: String?
+
+    public init(type: String, path: String, displayName: String? = nil) {
         self.type = type
         self.path = path
+        self.displayName = displayName
     }
-    
+
     /// Creates a file attachment
-    public static func file(_ path: String) -> Attachment {
-        Attachment(type: "file", path: path)
+    public static func file(_ path: String, displayName: String? = nil) -> Attachment {
+        Attachment(type: "file", path: path, displayName: displayName)
     }
-    
+
     /// Creates a directory attachment
-    public static func directory(_ path: String) -> Attachment {
-        Attachment(type: "directory", path: path)
+    public static func directory(_ path: String, displayName: String? = nil) -> Attachment {
+        Attachment(type: "directory", path: path, displayName: displayName)
     }
 }
 
