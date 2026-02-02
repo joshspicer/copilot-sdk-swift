@@ -19,7 +19,7 @@ Add the following to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/github/copilot-sdk.git", from: "1.0.0")
+    .package(url: "https://github.com/joshspicer/copilot-sdk-swift/", from: "1.0.0")
 ]
 ```
 
@@ -32,7 +32,7 @@ Then add `GitHubCopilotSDK` to your target dependencies:
 )
 ```
 
-Or in Xcode: File → Add Package Dependencies → Enter `https://github.com/github/copilot-sdk.git`
+Or in Xcode: File → Add Package Dependencies → Enter `https://github.com/joshspicer/copilot-sdk-swift/`
 
 ## Quick Start
 
