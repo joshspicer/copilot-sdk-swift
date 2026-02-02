@@ -195,6 +195,7 @@ public actor JSONRPCHandler {
     
     /// Send a request and wait for a response
     public func sendRequest(method: String, params: AnyCodable? = nil) async throws -> AnyCodable? {
+        print("[JSONRPC] sendRequest(method: \(method))")
         let id = nextRequestId()
         let request = JSONRPCRequest(id: id, method: method, params: params)
         
@@ -202,8 +203,11 @@ public actor JSONRPCHandler {
         pendingRequests[id] = pending
         
         do {
+            print("[JSONRPC] Sending request to transport...")
             try await transport.send(request)
+            print("[JSONRPC] Request sent, waiting for response...")
             let response = try await pending.wait()
+            print("[JSONRPC] Got response!")
             pendingRequests.removeValue(forKey: id)
             
             if let error = response.error {
@@ -212,6 +216,7 @@ public actor JSONRPCHandler {
             
             return response.result
         } catch {
+            print("[JSONRPC] sendRequest failed: \(error)")
             pendingRequests.removeValue(forKey: id)
             throw error
         }
@@ -231,11 +236,15 @@ public actor JSONRPCHandler {
     
     /// Receive loop that processes incoming messages
     private func receiveLoop() async {
+        print("[JSONRPC] receiveLoop() started")
         while isRunning {
             do {
+                print("[JSONRPC] Waiting for message...")
                 let message = try await transport.receive()
+                print("[JSONRPC] Received message: \(message)")
                 await handleMessage(message)
             } catch {
+                print("[JSONRPC] receiveLoop error: \(error)")
                 if isRunning {
                     // Log error but continue if still running
                     // In production, consider adding error callback
@@ -244,6 +253,7 @@ public actor JSONRPCHandler {
                 break
             }
         }
+        print("[JSONRPC] receiveLoop() ended")
     }
     
     /// Handle an incoming message

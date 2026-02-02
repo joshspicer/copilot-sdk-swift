@@ -29,7 +29,7 @@ public actor StdioTransport: Transport {
         
         process.executableURL = URL(fileURLWithPath: options.cliPath)
         
-        var arguments = ["server", "--transport", "stdio"]
+        var arguments = ["--server", "--stdio"]
         if !options.logLevel.isEmpty {
             arguments.append(contentsOf: ["--log-level", options.logLevel])
         }
@@ -71,10 +71,15 @@ public actor StdioTransport: Transport {
     public func start() throws {
         guard !isStarted else { return }
         
+        print("[Transport] Starting CLI process: \(process.executableURL?.path ?? "nil")")
+        print("[Transport] Arguments: \(process.arguments ?? [])")
+        
         do {
             try process.run()
             isStarted = true
+            print("[Transport] Process started, PID=\(process.processIdentifier), isRunning=\(process.isRunning)")
         } catch {
+            print("[Transport] Failed to start process: \(error)")
             throw CopilotError.processStartFailed(message: error.localizedDescription)
         }
     }
@@ -104,7 +109,9 @@ public actor StdioTransport: Transport {
     
     /// Write a message with Content-Length header
     private func writeMessage(_ data: Data) async throws {
+        print("[Transport] writeMessage called, isStarted=\(isStarted), isRunning=\(process.isRunning)")
         guard isStarted && process.isRunning else {
+            print("[Transport] writeMessage - NOT CONNECTED!")
             throw CopilotError.notConnected
         }
         
@@ -114,24 +121,43 @@ public actor StdioTransport: Transport {
         }
         
         let message = headerData + data
+        print("[Transport] Writing \(message.count) bytes to stdin...")
         stdin.fileHandleForWriting.write(message)
+        // Synchronize to ensure data is flushed
+        try? stdin.fileHandleForWriting.synchronize()
+        print("[Transport] Write complete")
     }
     
     /// Receive the next JSON-RPC message
     public func receive() async throws -> JSONRPCMessage {
+        print("[Transport] receive() called, waiting for message...")
         // Read until we have a complete message
+        var iterations = 0
         while true {
+            iterations += 1
+            if iterations % 100 == 0 {
+                print("[Transport] receive() iteration \(iterations), buffer size=\(buffer.count), isRunning=\(process.isRunning)")
+            }
+            
             // Try to parse a message from the buffer
             if let message = try parseMessage() {
+                print("[Transport] Parsed message: \(message)")
                 return message
             }
             
-            // Read more data
+            // Read more data using Task.detached to avoid blocking the actor
             let handle = stdout.fileHandleForReading
-            let newData = handle.availableData
+            let newData: Data = await withCheckedContinuation { continuation in
+                // Run blocking read on a background thread
+                DispatchQueue.global().async {
+                    let data = handle.availableData
+                    continuation.resume(returning: data)
+                }
+            }
             
             if newData.isEmpty {
                 if !process.isRunning {
+                    print("[Transport] Process not running, connection closed")
                     throw CopilotError.connectionClosed
                 }
                 // Small delay to prevent busy waiting
@@ -139,6 +165,7 @@ public actor StdioTransport: Transport {
                 continue
             }
             
+            print("[Transport] Received \(newData.count) bytes")
             buffer.append(newData)
         }
     }

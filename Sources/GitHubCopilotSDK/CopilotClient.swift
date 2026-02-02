@@ -32,6 +32,7 @@ public actor CopilotClient {
     
     /// Connect to the Copilot CLI server
     public func connect() async throws {
+        print("[SDK] connect() called, connectionState=\(connectionState)")
         guard connectionState != .connected else { return }
         
         setConnectionState(.connecting)
@@ -39,6 +40,7 @@ public actor CopilotClient {
         do {
             if let cliUrl = options.cliUrl {
                 // Connect to external server via TCP
+                print("[SDK] Using TCP transport to \(cliUrl)")
                 guard let (host, port) = TCPTransport.parseUrl(cliUrl) else {
                     throw CopilotError.connectionFailed(underlying: nil)
                 }
@@ -48,8 +50,11 @@ public actor CopilotClient {
                 transport = tcpTransport
             } else if options.useStdio {
                 // Start CLI process with stdio transport
+                print("[SDK] Using stdio transport, cliPath=\(options.cliPath)")
                 let stdioTransport = try StdioTransport(options: options)
+                print("[SDK] StdioTransport created, starting...")
                 try await stdioTransport.start()
+                print("[SDK] StdioTransport started successfully")
                 transport = stdioTransport
             } else {
                 // TCP transport to local CLI (need to start CLI in server mode)
@@ -72,6 +77,7 @@ public actor CopilotClient {
             }
             
             // Create RPC handler
+            print("[SDK] Creating JSONRPCHandler")
             let handler = JSONRPCHandler(transport: transport)
             rpcHandler = handler
             
@@ -85,12 +91,19 @@ public actor CopilotClient {
             }
             
             // Start receive loop
+            print("[SDK] Starting receive loop")
             receiveTask = Task {
                 await handler.start()
             }
             
+            // Small delay to allow the receive loop and CLI to initialize
+            print("[SDK] Waiting 100ms for initialization...")
+            try await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            
             // Verify connection with ping (use internal version to avoid ensureConnected check)
+            print("[SDK] Sending ping...")
             let pingResponse = try await pingInternal()
+            print("[SDK] Ping response: \(pingResponse)")
             
             // Check protocol version
             if let serverVersion = pingResponse.protocolVersion, serverVersion != sdkProtocolVersion {
@@ -98,8 +111,10 @@ public actor CopilotClient {
             }
             
             setConnectionState(.connected)
+            print("[SDK] Connection established!")
             
         } catch {
+            print("[SDK] Connection failed with error: \(error)")
             setConnectionState(.error)
             throw error
         }
@@ -160,11 +175,15 @@ public actor CopilotClient {
     
     /// Internal ping without ensureConnected check (used during connection)
     private func pingInternal() async throws -> PingResponse {
+        print("[SDK] pingInternal() called, rpcHandler=\(String(describing: rpcHandler))")
         guard let handler = rpcHandler else {
+            print("[SDK] pingInternal() - rpcHandler is nil!")
             throw CopilotError.notConnected
         }
         
+        print("[SDK] pingInternal() - sending request...")
         let result = try await handler.sendRequest(method: "ping", params: AnyCodable(["message": "ping"]))
+        print("[SDK] pingInternal() - got result: \(String(describing: result))")
         
         guard let dict = result?.value as? [String: Any] else {
             throw CopilotError.invalidResponse
