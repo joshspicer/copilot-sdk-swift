@@ -235,17 +235,14 @@ public actor StdioTransport: Transport {
 public actor TCPTransport: Transport {
     private let host: String
     private let port: Int
+    #if canImport(Network)
     private var connection: NWConnection?
+    #else
+    private var connection: Any?
+    #endif
     private var buffer = Data()
     private let encoder = JSONEncoder()
     private var isConnected = false
-    
-    #if canImport(Network)
-    /// Create a new TCP transport with the given host and port
-    public init(host: String, port: Int) {
-        self.host = host
-        self.port = port
-    }
     
     /// Parse a CLI URL into host and port
     public static func parseUrl(_ urlString: String) -> (host: String, port: Int)? {
@@ -282,6 +279,12 @@ public actor TCPTransport: Transport {
         return nil
     }
     
+    #if canImport(Network)
+    /// Create a new TCP transport with the given host and port
+    public init(host: String, port: Int) {
+        self.host = host
+        self.port = port
+    }
     /// Connect to the server
     public func connect() async throws {
         let nwEndpoint = NWEndpoint.hostPort(
